@@ -1,0 +1,16 @@
+Phidias TODO
+
+- put in the transition models informations already parsed and traslated to
+  their effective datatypes: booleans to gbooleans, dates to GDates an so on.
+  This will require many corrections here and there, both in PhidiasEngine
+  and plugins...
+
+- provide a non-modificable GtkTreeModel implementation to pass to
+  ItemsViewer plugins, so to enforce usage of signal "item-update-required"
+
+- permit to specify which predicates has to be loaded asyncronous, and use
+  the GtkTreeModel as a cache
+
+- use the same "extra_data" method for models passed to ChannelsViewers
+
+- use libpeas and capuchin to manage plugins?

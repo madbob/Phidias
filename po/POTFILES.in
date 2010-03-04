@@ -1,0 +1,12 @@
+src/expander.c
+src/main.c
+src/phidias-channels-viewer.c
+src/phidias-channelview.c
+src/phidias-engine.c
+src/phidias-items-viewer.c
+src/phidias-loader.c
+src/phidias-marshal.c
+src/phidias-module.c
+src/phidias-search-entry.c
+src/phidias-shell.c
+src/phidias-views.c
