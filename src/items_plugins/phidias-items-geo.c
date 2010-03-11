@@ -31,9 +31,22 @@ struct _PhidiasItemsGeoPrivate {
 
 	ChamplainLayer	*current_layer;
 	GHashTable	*markers;
+
+	gboolean	show_text;
+	ClutterActor	*marker_icon;
 };
 
 static GType type;
+
+static ClutterActor* do_marker_icon ()
+{
+	GtkIconTheme *theme;
+	GtkIconInfo *icon_info;
+
+	theme = gtk_icon_theme_get_default ();
+	icon_info = gtk_icon_theme_lookup_icon (theme, "go-jump", 22, 0);
+	return clutter_texture_new_from_file (gtk_icon_info_get_filename (icon_info), NULL);
+}
 
 static gboolean add_marker (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
@@ -46,6 +59,7 @@ static gboolean add_marker (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
 	gchar *longitude_str;
 	gchar *check;
 	ClutterActor *marker;
+	ClutterActor *icon;
 	PhidiasItemsGeo *item;
 
 	item = data;
@@ -70,7 +84,23 @@ static gboolean add_marker (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
 	if (*check != '\0')
 		goto end;
 
-	marker = champlain_marker_new_with_text (title, "Serif 9", NULL, NULL);
+	/*
+		TODO	Provide a proper ChamplainMarker implementation, able to store the icon,
+			the title, the description, and able to react to clicks
+	*/
+
+	icon = do_marker_icon ();
+
+	if (item->priv->show_text) {
+		marker = champlain_marker_new_with_text (title, "Serif 9", NULL, NULL);
+	}
+	else {
+		marker = champlain_marker_new_with_text (title, "Serif 0", NULL, NULL);
+		champlain_marker_set_image (marker, icon);
+	}
+
+	g_object_set_data_full (G_OBJECT (marker), "icon", icon, g_object_unref);
+
 	champlain_base_marker_set_position (CHAMPLAIN_BASE_MARKER (marker), lat, lon);
 	champlain_layer_add_marker (item->priv->current_layer, CHAMPLAIN_BASE_MARKER (marker));
 	g_hash_table_insert (item->priv->markers, gtk_tree_path_to_string (path), marker);
@@ -95,8 +125,8 @@ static void item_deleted_cb (GtkTreeModel *tree_model, GtkTreePath *path, Phidia
 	marker = g_hash_table_lookup (item->priv->markers, str);
 
 	if (marker != NULL) {
-		g_hash_table_remove (item->priv->markers, str);
 		champlain_layer_remove_marker (item->priv->current_layer, CHAMPLAIN_BASE_MARKER (marker));
+		g_hash_table_remove (item->priv->markers, str);
 	}
 
 	g_free (str);
@@ -114,6 +144,50 @@ static gboolean remove_marker (gpointer key, gpointer value, gpointer user_data)
 	layer = user_data;
 	champlain_layer_remove_marker (layer, CHAMPLAIN_BASE_MARKER (value));
 	return TRUE;
+}
+
+static void show_text_markers (ClutterActor *actor, ClutterEvent *event, PhidiasItemsGeo *item)
+{
+	GList *markers;
+	GList *iter;
+	ChamplainMarker *m;
+
+	if (item->priv->show_text == TRUE)
+		return;
+
+	markers = g_hash_table_get_values (item->priv->markers);
+
+	for (iter = markers; iter; iter = g_list_next (iter)) {
+		m = CHAMPLAIN_MARKER (iter->data);
+		champlain_marker_set_image (m, NULL);
+		champlain_marker_set_font_name (m, "Serif 9");
+	}
+
+	g_list_free (markers);
+	item->priv->show_text = TRUE;
+}
+
+static void show_point_markers (ClutterActor *actor, ClutterEvent *event, PhidiasItemsGeo *item)
+{
+	GList *markers;
+	GList *iter;
+	ClutterActor *icon;
+	ChamplainMarker *m;
+
+	if (item->priv->show_text == FALSE)
+		return;
+
+	markers = g_hash_table_get_values (item->priv->markers);
+
+	for (iter = markers; iter; iter = g_list_next (iter)) {
+		m = CHAMPLAIN_MARKER (iter->data);
+		icon = g_object_get_data (G_OBJECT (m), "icon");
+		champlain_marker_set_image (m, icon);
+		champlain_marker_set_font_name (m, "Serif 0");
+	}
+
+	g_list_free (markers);
+	item->priv->show_text = FALSE;
 }
 
 static void dispose_zoom_icons (PhidiasItemsGeo *item)
@@ -146,6 +220,30 @@ static void dispose_zoom_icons (PhidiasItemsGeo *item)
 		clutter_container_add_actor (CLUTTER_CONTAINER (stage), icon);
 		clutter_actor_set_position (icon, 10, 40);
 		g_signal_connect_swapped (icon, "button-press-event", G_CALLBACK (champlain_view_zoom_out), view);
+	}
+
+	/*
+		TODO	Those have to be mutually exclusive
+	*/
+
+	icon_info = gtk_icon_theme_lookup_icon (theme, "format-text-bold", 24, 0);
+	if (icon_info != NULL) {
+		icon = clutter_texture_new_from_file (gtk_icon_info_get_filename (icon_info), NULL);
+		clutter_actor_set_reactive (icon, TRUE);
+		clutter_actor_set_fixed_position_set (icon, TRUE);
+		clutter_container_add_actor (CLUTTER_CONTAINER (stage), icon);
+		clutter_actor_set_position (icon, 10, 70);
+		g_signal_connect (icon, "button-press-event", G_CALLBACK (show_text_markers), item);
+	}
+
+	icon_info = gtk_icon_theme_lookup_icon (theme, "go-down", 24, 0);
+	if (icon_info != NULL) {
+		icon = clutter_texture_new_from_file (gtk_icon_info_get_filename (icon_info), NULL);
+		clutter_actor_set_reactive (icon, TRUE);
+		clutter_actor_set_fixed_position_set (icon, TRUE);
+		clutter_container_add_actor (CLUTTER_CONTAINER (stage), icon);
+		clutter_actor_set_position (icon, 10, 100);
+		g_signal_connect (icon, "button-press-event", G_CALLBACK (show_point_markers), item);
 	}
 }
 
@@ -196,11 +294,11 @@ static const GPtrArray* phidias_items_geo_get_extra (PhidiasItemsViewer *self)
 		item->priv->extras = g_ptr_array_sized_new (2);
 
 		col = phidias_extra_column_new ();
-		phidias_extra_column_set_pathv (col, "mlo:location", "mlo:latitude", NULL);
+		phidias_extra_column_set_pathv (col, "mlo:location", "mlo:asGeoPoint", "mlo:latitude", NULL);
 		g_ptr_array_add (item->priv->extras, col);
 
 		col = phidias_extra_column_new ();
-		phidias_extra_column_set_pathv (col, "mlo:location", "mlo:longitude", NULL);
+		phidias_extra_column_set_pathv (col, "mlo:location", "mlo:asGeoPoint", "mlo:longitude", NULL);
 		g_ptr_array_add (item->priv->extras, col);
 	}
 

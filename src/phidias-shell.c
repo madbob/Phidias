@@ -70,7 +70,7 @@ static void wire_new_items_viewer_cb (PhidiasViews *view, PhidiasItemsViewer *vi
 
 	if (extra != NULL) {
 		for (i = 0; i < extra->len; i++) {
-			col = (PhidiasExtraColumn*) g_ptr_array_index (extra, 0);
+			col = (PhidiasExtraColumn*) g_ptr_array_index (extra, i);
 			index = phidias_engine_add_managed_info (item->priv->engine, col);
 			phidias_extra_column_set_index (col, index);
 		}

@@ -570,8 +570,6 @@ static void item_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine *e
 		g_string_append_printf (query, " ; %s ?%c }", ITEM_TO_CONTAINER_PREDICATE, c);
 		str_query = g_string_free (query, FALSE);
 
-		printf ("QUERY = %s\n", str_query);
-
 		tracker_resources_sparql_query_async (engine->priv->tracker, str_query, item_added_data_reply_cb, engine);
 		g_free (str_query);
 	}
