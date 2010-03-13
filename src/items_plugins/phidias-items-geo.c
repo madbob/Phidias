@@ -96,10 +96,10 @@ static gboolean add_marker (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
 	}
 	else {
 		marker = champlain_marker_new_with_text (title, "Serif 0", NULL, NULL);
-		champlain_marker_set_image (marker, icon);
+		champlain_marker_set_image (CHAMPLAIN_MARKER (marker), icon);
 	}
 
-	g_object_set_data_full (G_OBJECT (marker), "icon", icon, g_object_unref);
+	g_object_set_data (G_OBJECT (marker), "icon", icon);
 
 	champlain_base_marker_set_position (CHAMPLAIN_BASE_MARKER (marker), lat, lon);
 	champlain_layer_add_marker (item->priv->current_layer, CHAMPLAIN_BASE_MARKER (marker));
