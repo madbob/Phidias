@@ -103,6 +103,11 @@ static void new_plugin_cb (PhidiasLoader *loader, GObject *plugin, PhidiasViews 
 	g_signal_emit (item, signals [NEW_AVAILABLE_VIEW], 0, plug, NULL);
 }
 
+static void removed_plugin_cb (PhidiasLoader *loader, GObject *plugin, PhidiasViews *item)
+{
+	gtk_container_remove (GTK_CONTAINER (item), GTK_WIDGET (plugin));
+}
+
 static gboolean init_plugins_loader (gpointer data)
 {
 	gchar *path;
@@ -114,6 +119,7 @@ static gboolean init_plugins_loader (gpointer data)
 	path = g_build_filename (PLUGIN_DIR, "items", NULL);
 	loader = phidias_loader_new (path);
 	g_signal_connect (loader, "plugin-found", G_CALLBACK (new_plugin_cb), item);
+	g_signal_connect (loader, "plugin-removed", G_CALLBACK (removed_plugin_cb), item);
 	g_free (path);
 	phidias_loader_run (loader);
 	return FALSE;

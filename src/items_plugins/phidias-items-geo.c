@@ -314,12 +314,16 @@ static void phidias_items_viewer_interface_init (PhidiasItemsViewerInterface *if
 
 static void phidias_items_geo_finalize (GObject *object)
 {
+	ChamplainView *view;
 	PhidiasItemsGeo *geo;
 
 	geo = PHIDIAS_ITEMS_GEO (object);
 
-	champlain_view_remove_layer (gtk_champlain_embed_get_view (GTK_CHAMPLAIN_EMBED (geo)), geo->priv->current_layer);
-	g_object_unref (geo->priv->current_layer);
+	if (geo->priv->current_layer != NULL) {
+		view = gtk_champlain_embed_get_view (GTK_CHAMPLAIN_EMBED (geo));
+		champlain_view_remove_layer (view, geo->priv->current_layer);
+		g_object_unref (geo->priv->current_layer);
+	}
 
 	g_hash_table_destroy (geo->priv->markers);
 }

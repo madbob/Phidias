@@ -49,6 +49,7 @@ struct _PhidiasLoaderClass {
 	GObjectClass		parent_class;
 
 	void (*plugin_found) (PhidiasLoader *loader, GObject *plug);
+	void (*plugin_removed) (PhidiasLoader *loader, GObject *plug);
 };
 
 GType		phidias_loader_get_type ();
