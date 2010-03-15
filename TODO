@@ -8,9 +8,25 @@ Phidias TODO
 - provide a non-modificable GtkTreeModel implementation to pass to
   ItemsViewer plugins, so to enforce usage of signal "item-update-required"
 
+- implement plugginable "triggers", for actions to execute by given hooks
+
+- improve filter bar, and permit to specify which predicates may be involved
+  in full-text search
+
 - permit to specify which predicates has to be loaded asyncronous, and use
   the GtkTreeModel as a cache
+
+- enable and disable plugins at compile-time
 
 - use the same "extra_data" method for models passed to ChannelsViewers
 
 - use libpeas and capuchin to manage plugins?
+
+- possible items viewers:
+	- timeline
+	- people, with items group by author
+	- calendar view
+
+- possible channels viewers:
+	- show only channels with unread items
+	- sort by most recent items

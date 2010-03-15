@@ -19,6 +19,7 @@ m4_define([dbus_req_version], [0.82])
 m4_define([trackerclient_req_version], [0.7.23])
 m4_define([webkit_req_version], [1.1.15.4])
 m4_define([champlain_req_version], [0.4.2])
+m4_define([cluttergtk_req_version], [0.10.2])
 
 AC_PREREQ([2.59])
 AC_INIT([phidias], [phidias_version], [], [phidias])
@@ -54,7 +55,8 @@ PKG_CHECK_MODULES(PHIDIAS,
 		dbus-glib-1 >= dbus_req_version
 		tracker-client-0.7 >= trackerclient_req_version
 		webkit-1.0 >= webkit_req_version
-		champlain-gtk-0.4 >= champlain_req_version)
+		champlain-gtk-0.4 >= champlain_req_version
+		clutter-gtk-0.10 >= cluttergtk_req_version)
 AC_SUBST(PHIDIAS_CFLAGS)
 AC_SUBST(PHIDIAS_LIBS)
 
