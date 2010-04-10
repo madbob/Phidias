@@ -69,8 +69,8 @@ static void size_received_cb (GtkWidget *widget, GtkAllocation *allocation, gpoi
 static ClutterActorBox* set_word_position (PhidiasItemsTags *viewer, ClutterActor *label, GList *managed)
 {
 	int i;
-	int try;
-	int managed_num;
+	int shifter;
+	int offset;
 	gfloat x1;
 	gfloat y1;
 	gfloat x2;
@@ -79,7 +79,6 @@ static ClutterActorBox* set_word_position (PhidiasItemsTags *viewer, ClutterActo
 	gfloat height;
 	gboolean more;
 	GList *iter;
-	GList *first;
 	ClutterActorBox *box;
 	ClutterActorBox *sibling_box;
 	static int move = -1;
@@ -92,13 +91,15 @@ static ClutterActorBox* set_word_position (PhidiasItemsTags *viewer, ClutterActo
 	y2 = y1 + height;
 
 	if (managed != NULL) {
-		managed_num = g_list_length (managed);
+		shifter = -1;
 
-		for (try = 0; try < 50; try++) {
+		for (;;) {
+			// offset = (shifter != 0 && shifter % 2 == 0 ? 10 * (shifter / 2) : 0);
+			offset = (shifter / 2);
+
 			more = FALSE;
-			first = g_list_nth (managed, rand () % managed_num);
 
-			for (iter = first; iter; iter = g_list_next (iter)) {
+			for (iter = managed; iter; iter = g_list_next (iter)) {
 				sibling_box = iter->data;
 
 				if (sibling_box->x1 < x2 && sibling_box->x2 > x1 && sibling_box->y1 < y2 && sibling_box->y2 > y1) {
@@ -107,52 +108,45 @@ static ClutterActorBox* set_word_position (PhidiasItemsTags *viewer, ClutterActo
 				}
 			}
 
-			if (more == FALSE) {
-				for (iter = managed; iter != first; iter = g_list_next (iter)) {
-					sibling_box = iter->data;
-
-					if (sibling_box->x1 < x2 && sibling_box->x2 > x1 && sibling_box->y1 < y2 && sibling_box->y2 > y1) {
-						more = TRUE;
-						break;
-					}
-				}
-			}
-
 			if (more == TRUE) {
 				for (i = move, move = (i + 1) % 4; more == TRUE && move != i; move = (move + 1) % 4) {
 					switch (move) {
 						case 0:
-							if (sibling_box->x2 + width < viewer->priv->current_width) {
-								x1 = sibling_box->x2;
+							if (sibling_box->x2 + (width * offset) + width <= viewer->priv->current_width) {
+								x1 = sibling_box->x2 + (width * offset);
 								x2 = x1 + width;
 								more = FALSE;
+								move = 3;
 							}
 
 							break;
 
 						case 1:
-							if (sibling_box->x1 - width > 0) {
-								x2 = sibling_box->x1;
-								x1 = x2 - width;
+							if (sibling_box->y2 + (height * offset) + height <= viewer->priv->current_height) {
+								y1 = sibling_box->y2 + (height * offset);
+								y2 = y1 + height;
 								more = FALSE;
+								move = 0;
 							}
 
 							break;
 
 						case 2:
-							if (sibling_box->y2 + height < viewer->priv->current_height) {
-								y1 = sibling_box->y2;
-								y2 = y1 + height;
+							if (sibling_box->x1 - (width * offset) - width >= 0) {
+								x2 = sibling_box->x1 - (width * offset);
+								x1 = x2 - width;
 								more = FALSE;
+								move = 1;
 							}
 
 							break;
 
 						case 3:
-							if (sibling_box->y1 - height > 0) {
-								y2 = sibling_box->y1;
+							if (sibling_box->y1 - (height * offset) - height >= 0) {
+								y2 = sibling_box->y1 - (height * offset);
 								y1 = y2 - height;
 								more = FALSE;
+								move = 2;
 							}
 
 							break;
@@ -162,16 +156,16 @@ static ClutterActorBox* set_word_position (PhidiasItemsTags *viewer, ClutterActo
 					}
 				}
 
-				if (more == TRUE)
+				if (more == TRUE) {
 					return NULL;
+				}
 			}
 			else {
 				break;
 			}
-		}
 
-		if (try == 50)
-			return NULL;
+			shifter++;
+		}
 	}
 
 	box = g_new0 (ClutterActorBox, 1);
@@ -180,7 +174,6 @@ static ClutterActorBox* set_word_position (PhidiasItemsTags *viewer, ClutterActo
 	box->y1 = y1;
 	box->y2 = y2;
 
-	clutter_actor_set_position (label, box->x1, box->y1);
 	return box;
 }
 
@@ -221,6 +214,7 @@ static ClutterActor* do_autosize_tag_cloud (PhidiasItemsTags *viewer, GList *wor
 		}
 
 		managed = g_list_prepend (managed, box);
+		clutter_actor_set_position (label, box->x1, box->y1);
 	}
 
 	if (managed != NULL) {
