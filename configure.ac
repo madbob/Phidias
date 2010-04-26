@@ -20,6 +20,7 @@ m4_define([trackerclient_req_version], [0.8.1])
 m4_define([webkit_req_version], [1.1.15.4])
 m4_define([champlain_req_version], [0.4.2])
 m4_define([cluttergtk_req_version], [0.10.2])
+m4_define([libgrss_req_version], [0.4.0])
 
 AC_PREREQ([2.59])
 AC_INIT([phidias], [phidias_version], [], [phidias])
@@ -56,7 +57,8 @@ PKG_CHECK_MODULES(PHIDIAS,
 		tracker-client-0.8 >= trackerclient_req_version
 		webkit-1.0 >= webkit_req_version
 		champlain-gtk-0.4 >= champlain_req_version
-		clutter-gtk-0.10 >= cluttergtk_req_version)
+		clutter-gtk-0.10 >= cluttergtk_req_version
+		libgrss-0 >= libgrss_req_version)
 AC_SUBST(PHIDIAS_CFLAGS)
 AC_SUBST(PHIDIAS_LIBS)
 
@@ -117,6 +119,8 @@ AC_CONFIG_FILES([
 	src/Makefile
 	src/items_plugins/Makefile
 	src/channels_plugins/Makefile
+	tools/Makefile
+	tools/feeds-manager/Makefile
 	po/Makefile.in
 ])
 

@@ -1,3 +1,3 @@
 plugindir = @plugindir@
 
-SUBDIRS = lib src
+SUBDIRS = lib src tools
