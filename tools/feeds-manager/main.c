@@ -19,6 +19,7 @@
 #include "common.h"
 #include "marshal.h"
 #include "feed-settings.h"
+#include "feeds-adder.h"
 
 static gboolean exit_all (GtkWidget *widget, GdkEvent *event, GtkWidget *setts)
 {
@@ -322,10 +323,13 @@ static void listen_tracker (GtkListStore *model)
 int main (int argc, char **argv)
 {
 	GtkWidget *window;
+	GtkWidget *frame;
 	GtkWidget *vbox;
 	GtkWidget *hbox;
 	GtkWidget *list;
+	GtkWidget *scroll;
 	GtkWidget *setts;
+	GtkWidget *adder;
 	GtkListStore *model;
 	GtkCellRenderer *renderer;
 	GtkTreeViewColumn *col;
@@ -342,18 +346,32 @@ int main (int argc, char **argv)
 	vbox = gtk_vbox_new (FALSE, 10);
 	gtk_container_add (GTK_CONTAINER (window), vbox);
 
-	hbox = gtk_hbox_new (FALSE, 10);
+	frame = gtk_frame_new ("Manage");
+	gtk_container_border_width (GTK_CONTAINER (frame), 10);
+	gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
+
+	hbox = gtk_hbox_new (TRUE, 10);
 	gtk_container_border_width (GTK_CONTAINER (hbox), 10);
-	gtk_box_pack_start (GTK_BOX (vbox), hbox, TRUE, TRUE, 0);
+	gtk_container_add (GTK_CONTAINER (frame), hbox);
 
 	list = gtk_tree_view_new ();
 	renderer = gtk_cell_renderer_text_new ();
 	col = gtk_tree_view_column_new_with_attributes ("Title", renderer, "text", 1, NULL);
 	gtk_tree_view_append_column (GTK_TREE_VIEW (list), col);
-	gtk_box_pack_start (GTK_BOX (hbox), list, FALSE, FALSE, 0);
+	scroll = gtk_scrolled_window_new (NULL, NULL);
+	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gtk_scrolled_window_add_with_viewport (GTK_SCROLLED_WINDOW (scroll), list);
+	gtk_box_pack_start (GTK_BOX (hbox), scroll, TRUE, TRUE, 0);
 
 	setts = feed_settings_new ();
 	gtk_box_pack_start (GTK_BOX (hbox), setts, FALSE, FALSE, 0);
+
+	frame = gtk_frame_new ("Add");
+	gtk_container_border_width (GTK_CONTAINER (frame), 10);
+	gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
+
+	adder = feeds_adder_new ();
+	gtk_container_add (GTK_CONTAINER (frame), adder);
 
 	selection = gtk_tree_view_get_selection (GTK_TREE_VIEW (list));
 	gtk_tree_selection_set_mode (selection, GTK_SELECTION_BROWSE);
@@ -370,6 +388,7 @@ int main (int argc, char **argv)
 	init_model (tracker_client, model);
 	listen_tracker (model);
 	tune_model (tracker_client, model);
+	feeds_adder_wire_tracker (FEEDS_ADDER (adder), tracker_client);
 
 	gtk_widget_show_all (window);
 	gtk_main ();

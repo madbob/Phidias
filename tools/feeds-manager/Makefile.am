@@ -24,8 +24,12 @@ BUILT_SOURCES = $(marshal_source)
 feeds_manager_SOURCES = \
 	$(BUILT_SOURCES)		\
 	main.c				\
+	feeds-adder.c			\
+	feeds-adder.h			\
 	feed-settings.c			\
-	feed-settings.h
+	feed-settings.h			\
+	progress-box.c			\
+	progress-box.h
 
 marshal.h: marshal.list
 	$(GLIB_GENMARSHAL) $< --prefix=marshal --header > $@

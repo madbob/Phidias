@@ -22,6 +22,7 @@
 #include <gtk/gtk.h>
 #include <dbus/dbus-glib.h>
 #include <libtracker-client/tracker-client.h>
+#include <libgrss.h>
 
 typedef enum {
 	PREDICATE_SUBJECT,

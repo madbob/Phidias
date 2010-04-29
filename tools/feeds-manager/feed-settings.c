@@ -1,3 +1,21 @@
+/*  Copyright (C) 2010 Roberto Guido <madbob@users.barberaware.org>
+ *
+ *  This file is part of Phidias
+ *
+ *  Phidias is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "feed-settings.h"
 #include "marshal.h"
 
@@ -215,6 +233,8 @@ static void feed_settings_init (FeedSettings *app)
 	button = gtk_button_new_from_stock (GTK_STOCK_DELETE);
 	g_signal_connect (button, "clicked", G_CALLBACK (remove_feed), app);
 	gtk_box_pack_start (GTK_BOX (app), button, TRUE, TRUE, 0);
+
+	gtk_widget_set_sensitive (GTK_WIDGET (app), FALSE);
 }
 
 GtkWidget* feed_settings_new ()
@@ -229,6 +249,7 @@ GtkWidget* feed_settings_new ()
 void feed_settings_set_id (FeedSettings *setts, gchar *id)
 {
 	check_and_save (setts);
+	gtk_widget_set_sensitive (GTK_WIDGET (setts), TRUE);
 	setts->priv->id = g_strdup (id);
 }
 
