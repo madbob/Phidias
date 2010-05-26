@@ -84,6 +84,10 @@ static gboolean add_marker (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
 	if (*check != '\0')
 		goto end;
 
+	check = g_markup_escape_text (title, -1);
+	g_free (title);
+	title = check;
+
 	/*
 		TODO	Provide a proper ChamplainMarker implementation, able to store the icon,
 			the title, the description, and able to react to clicks

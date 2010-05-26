@@ -58,14 +58,9 @@ static void free_list (GList *list)
 	g_list_free (list);
 }
 
-static void feed_fetched (GObject *source, GAsyncResult *res, gpointer user_data)
+static void create_tracker_item (FeedsAdder *app, FeedChannel *channel)
 {
 	TrackerSparqlBuilder *sparql;
-	FeedChannel *channel;
-	FeedsAdder *app;
-
-	app = user_data;
-	channel = FEED_CHANNEL (source);
 
 	sparql = tracker_sparql_builder_new_update ();
 
@@ -93,6 +88,28 @@ static void feed_fetched (GObject *source, GAsyncResult *res, gpointer user_data
 	g_object_unref (sparql);
 }
 
+static void feed_fetched (GObject *source, GAsyncResult *res, gpointer user_data)
+{
+	GError *error;
+	FeedChannel *channel;
+	FeedsAdder *app;
+
+	error = NULL;
+	g_simple_async_result_propagate_error (G_SIMPLE_ASYNC_RESULT (res), &error);
+
+	if (error != NULL) {
+		g_warning ("%s", error->message);
+		g_error_free (error);
+	}
+	else {
+		app = user_data;
+		channel = FEED_CHANNEL (source);
+		create_tracker_item (app, channel);
+	}
+
+	g_object_unref (source);
+}
+
 static void handle_feeds_list (GList *list, FeedsAdder *app)
 {
 	GList *iter;
@@ -108,6 +125,7 @@ static void remote_file_loaded (GObject *source_object, GAsyncResult *res, gpoin
 	GError *error;
 	GtkWidget *dialog;
 	FeedsAdder *app;
+	FeedChannel *chan;
 	FeedsGroup *opml;
 
 	error = NULL;
@@ -128,13 +146,12 @@ static void remote_file_loaded (GObject *source_object, GAsyncResult *res, gpoin
 		list = feeds_group_parse_file (opml, dest_path, NULL);
 
 		if (list == NULL) {
-			/**
-				TODO	An appropriate libgrss function is missing :-\
-			*/
+			chan = feed_channel_new_from_file (dest_path);
+			create_tracker_item (app, chan);
 		}
 		else {
 			handle_feeds_list (list, app);
-			free_list (list);
+			g_list_free (list);
 		}
 
 		g_object_unref (opml);
@@ -179,6 +196,24 @@ static void add_from_remote (GtkButton *button, FeedsAdder *app)
 
 static void add_from_local (GtkButton *button, FeedsAdder *app)
 {
+	gchar *path;
+	GList *list;
+	FeedsGroup *opml;
+
+	opml = feeds_group_new ();
+
+	path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (app->priv->local));
+	if (path == NULL)
+		return;
+
+	list = feeds_group_parse_file (opml, path, NULL);
+	if (list != NULL) {
+		handle_feeds_list (list, app);
+		g_list_free (list);
+	}
+
+	g_object_unref (opml);
+	g_free (path);
 }
 
 static void feeds_adder_init (FeedsAdder *app)
@@ -195,7 +230,7 @@ static void feeds_adder_init (FeedsAdder *app)
 	button = gtk_button_new_from_stock (GTK_STOCK_APPLY);
 	g_signal_connect (button, "clicked", G_CALLBACK (add_from_remote), app);
 	gtk_box_pack_start (GTK_BOX (app), row, TRUE, TRUE, 0);
-	progress_box_pack_start (PROGRESS_BOX (row), gtk_label_new ("Paste here URL for a feed or OPML remote file: "), FALSE, FALSE, 0);
+	progress_box_pack_start (PROGRESS_BOX (row), gtk_label_new ("Paste here URL for a feed or OPML/XOXO/XBEL remote file: "), FALSE, FALSE, 0);
 	progress_box_pack_start (PROGRESS_BOX (row), app->priv->remote, TRUE, TRUE, 0);
 	progress_box_pack_start (PROGRESS_BOX (row), button, FALSE, FALSE, 0);
 	app->priv->remote_progress = row;
@@ -207,7 +242,7 @@ static void feeds_adder_init (FeedsAdder *app)
 	button = gtk_button_new_from_stock (GTK_STOCK_APPLY);
 	g_signal_connect (button, "clicked", G_CALLBACK (add_from_local), app);
 	gtk_box_pack_start (GTK_BOX (app), row, TRUE, TRUE, 0);
-	gtk_box_pack_start (GTK_BOX (row), gtk_label_new ("Select a local OPML file to import: "), FALSE, FALSE, 0);
+	gtk_box_pack_start (GTK_BOX (row), gtk_label_new ("Select a local OPML/XOXO/XBEL file to import: "), FALSE, FALSE, 0);
 	gtk_box_pack_start (GTK_BOX (row), app->priv->local, TRUE, TRUE, 0);
 	gtk_box_pack_start (GTK_BOX (row), button, FALSE, FALSE, 0);
 }

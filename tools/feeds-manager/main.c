@@ -377,6 +377,9 @@ int main (int argc, char **argv)
 	gtk_tree_selection_set_mode (selection, GTK_SELECTION_BROWSE);
 
 	model = gtk_list_store_new (7, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_BOOLEAN);
+	/*
+		TODO	Sort elements by name
+	*/
 	gtk_tree_view_set_model (GTK_TREE_VIEW (list), GTK_TREE_MODEL (model));
 
 	g_signal_connect (setts, "remove-feed", G_CALLBACK (feed_removed), tracker_client);

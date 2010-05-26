@@ -502,7 +502,7 @@ static void item_added_data_reply_cb (GPtrArray *result, GError *error, gpointer
 	}
 }
 
-static void append_expanded_extra_column (PhidiasExtraColumn *col, GString *query, char c)
+static void append_expanded_extra_column (PhidiasExtraColumn *col, const gchar *subject, GString *query, char c)
 {
 	register int i;
 	int path_len;
@@ -510,15 +510,15 @@ static void append_expanded_extra_column (PhidiasExtraColumn *col, GString *quer
 
 	switch (phidias_extra_column_get_content_type (col)) {
 		case PHIDIAS_EXTRA_COLUMN_PREDICATE:
-			g_string_append_printf (query, " . OPTIONAL { ?item %s ?%c }",
-						phidias_extra_column_get_predicate (col), c);
+			g_string_append_printf (query, " . OPTIONAL { <%s> %s ?%c }",
+						subject, phidias_extra_column_get_predicate (col), c);
 			break;
 
 		case PHIDIAS_EXTRA_COLUMN_PATH:
 			path = phidias_extra_column_get_path (col);
 			path_len = g_strv_length ((gchar**) path);
 
-			g_string_append_printf (query, " . OPTIONAL { ?item %s ?%c_offset_0 ", path [0], c);
+			g_string_append_printf (query, " . OPTIONAL { <%s> %s ?%c_offset_0 ", subject, path [0], c);
 
 			for (i = 1; i < path_len - 1; i++) {
 				g_string_append_printf (query, " . ?%c_offset_%d %s ?%c_offset_%d ",
@@ -558,16 +558,20 @@ static void item_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine *e
 		for (a = 1, c = 'a'; a < ITEM_INFO_LAST; a++, c++)
 			g_string_append_printf (query, " ; %s ?%c", ITEM_INFO_PREDICATES [a], c);
 
-		for (a = 0; a < engine->priv->item_requirements->len; a++, c++) {
-			col = (PhidiasExtraColumn*) g_ptr_array_index (engine->priv->item_requirements, a);
-			append_expanded_extra_column (col, query, c);
-		}
-
 		/*
 			Take care last value refere to the container of the fetched item, is not
 			to be saved in final model
 		*/
-		g_string_append_printf (query, " ; %s ?%c }", ITEM_TO_CONTAINER_PREDICATE, c);
+		g_string_append_printf (query, " ; %s ?%c ", ITEM_TO_CONTAINER_PREDICATE, c);
+		c++;
+
+		for (a = 0; a < engine->priv->item_requirements->len; a++, c++) {
+			col = (PhidiasExtraColumn*) g_ptr_array_index (engine->priv->item_requirements, a);
+			append_expanded_extra_column (col, subjects [i], query, c);
+		}
+
+		g_string_append (query, " }");
+
 		str_query = g_string_free (query, FALSE);
 
 		tracker_resources_sparql_query_async (engine->priv->tracker, str_query, item_added_data_reply_cb, engine);
@@ -720,7 +724,7 @@ static void enrich_models_with_metadata (PhidiasEngine *engine, PhidiasExtraColu
 
 		g_string_append_printf (query, "SELECT %d ?item ?a WHERE {?item a %s . ?item %s <%s>",
 					col_index, ITEM_INFO_MAIN_CLASS, ITEM_TO_CONTAINER_PREDICATE, (gchar*) iter->data);
-		append_expanded_extra_column (extra, query, 'a');
+		append_expanded_extra_column (extra, iter->data, query, 'a');
 		g_string_append_c (query, '}');
 
 		str_query = g_string_free (query, FALSE);
