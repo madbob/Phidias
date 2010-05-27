@@ -60,7 +60,14 @@ static void free_list (GList *list)
 
 static void create_tracker_item (FeedsAdder *app, FeedChannel *channel)
 {
+	const gchar *str;
 	TrackerSparqlBuilder *sparql;
+
+	str = feed_channel_get_source (channel);
+	if (str == NULL) {
+		g_warning ("Feed without source, unable to manage.");
+		return;
+	}
 
 	sparql = tracker_sparql_builder_new_update ();
 
@@ -75,10 +82,16 @@ static void create_tracker_item (FeedsAdder *app, FeedChannel *channel)
 	tracker_sparql_builder_object (sparql, "mfo:FeedChannel");
 	tracker_sparql_builder_predicate (sparql, "a");
 	tracker_sparql_builder_object (sparql, "nie:DataObject");
+
 	tracker_sparql_builder_predicate (sparql, "nie:url");
-	tracker_sparql_builder_object_string (sparql, feed_channel_get_source (channel));
-	tracker_sparql_builder_predicate (sparql, "nie:title");
-	tracker_sparql_builder_object_string (sparql, feed_channel_get_title (channel));
+	tracker_sparql_builder_object_unvalidated (sparql, str);
+
+	str = feed_channel_get_title (channel);
+	if (str != NULL) {
+		tracker_sparql_builder_predicate (sparql, "nie:title");
+		tracker_sparql_builder_object_unvalidated (sparql, str);
+	}
+
 	tracker_sparql_builder_predicate (sparql, "mfo:feedSettings");
 	tracker_sparql_builder_object (sparql, "_:setts");
 
@@ -147,6 +160,7 @@ static void remote_file_loaded (GObject *source_object, GAsyncResult *res, gpoin
 
 		if (list == NULL) {
 			chan = feed_channel_new_from_file (dest_path);
+			feed_channel_set_source (chan, g_file_get_uri (G_FILE (source_object)));
 			create_tracker_item (app, chan);
 		}
 		else {

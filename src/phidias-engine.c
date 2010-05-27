@@ -490,7 +490,7 @@ static void item_added_data_reply_cb (GPtrArray *result, GError *error, gpointer
 		for (i = 0; i < result->len; i++) {
 			values = (gchar**) g_ptr_array_index (result, i);
 
-			filtered_model = g_hash_table_lookup (engine->priv->models_pool, values [tot - 1]);
+			filtered_model = g_hash_table_lookup (engine->priv->models_pool, values [ITEM_INFO_LAST]);
 			if (filtered_model != NULL) {
 				for (i = 0; i < (tot - 1); i++)
 					g_value_set_string (&(dumps [i]), values [i]);
@@ -559,8 +559,9 @@ static void item_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine *e
 			g_string_append_printf (query, " ; %s ?%c", ITEM_INFO_PREDICATES [a], c);
 
 		/*
-			Take care last value refere to the container of the fetched item, is not
-			to be saved in final model
+			Take care the offset of this predicate must be predictable in
+			item_added_data_reply_cb(), since thise value (the channel's ID) is used
+			to identify the right GtkTreeModel in which put the item
 		*/
 		g_string_append_printf (query, " ; %s ?%c ", ITEM_TO_CONTAINER_PREDICATE, c);
 		c++;
@@ -573,7 +574,6 @@ static void item_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine *e
 		g_string_append (query, " }");
 
 		str_query = g_string_free (query, FALSE);
-
 		tracker_resources_sparql_query_async (engine->priv->tracker, str_query, item_added_data_reply_cb, engine);
 		g_free (str_query);
 	}

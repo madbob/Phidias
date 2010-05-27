@@ -16,6 +16,7 @@ Phidias depends on:
   - webkit-1.0 >= 1.1.15.4
   - champlain-gtk-0.4 >= 0.4.2
   - clutter-gtk-0.10 >= 0.10.2
+  - libgrss >= 0.4
 
 INSTALLATION
 -------------------------------------------------------------------------------
