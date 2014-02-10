@@ -20,8 +20,7 @@
 #define __COMMON_H__
 
 #include <gtk/gtk.h>
-#include <dbus/dbus-glib.h>
-#include <libtracker-client/tracker-client.h>
+#include <libtracker-sparql/tracker-sparql.h>
 #include <libgrss.h>
 
 typedef enum {

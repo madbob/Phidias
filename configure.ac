@@ -1,5 +1,5 @@
 m4_define([phidias_major_version], [0])
-m4_define([phidias_minor_version], [1])
+m4_define([phidias_minor_version], [2])
 m4_define([phidias_micro_version], [0])
 
 m4_define([phidias_version],
@@ -15,12 +15,11 @@ m4_define([lt_revision], [phidias_interface_age])
 m4_define([lt_age],
           [m4_eval(phidias_binary_age - phidias_interface_age)])
 
-m4_define([dbus_req_version], [0.82])
-m4_define([trackerclient_req_version], [0.8.1])
-m4_define([webkit_req_version], [1.1.15.4])
-m4_define([champlain_req_version], [0.4.2])
-m4_define([cluttergtk_req_version], [0.10.2])
-m4_define([libgrss_req_version], [0.4.0])
+m4_define([gio_req_version], [2.32.3])
+m4_define([webkit_req_version], [2.2.4])
+m4_define([champlain_req_version], [0.12.5])
+m4_define([tracker_req_version], [0.16.2])
+m4_define([libgrss_req_version], [0.5.0])
 
 AC_PREREQ([2.59])
 AC_INIT([phidias], [phidias_version], [], [phidias])
@@ -53,12 +52,11 @@ AC_SUBST(PHIDIAS_VERSION)
 
 dnl phidias checks
 PKG_CHECK_MODULES(PHIDIAS,
-		dbus-glib-1 >= dbus_req_version
-		tracker-client-0.8 >= trackerclient_req_version
-		webkit-1.0 >= webkit_req_version
-		champlain-gtk-0.4 >= champlain_req_version
-		clutter-gtk-0.10 >= cluttergtk_req_version
-		libgrss-0 >= libgrss_req_version)
+		gio-2.0 >= gio_req_version
+		webkitgtk-3.0 >= webkit_req_version
+		champlain-gtk-0.12 >= champlain_req_version
+		tracker-sparql-0.16 >= tracker_req_version
+		libgrss-0.5 >= libgrss_req_version)
 AC_SUBST(PHIDIAS_CFLAGS)
 AC_SUBST(PHIDIAS_LIBS)
 

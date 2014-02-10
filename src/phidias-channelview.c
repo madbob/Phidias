@@ -37,7 +37,7 @@ enum {
 
 static guint signals [LAST_SIGNAL];
 
-G_DEFINE_TYPE (PhidiasChannelView, phidias_channelview, GTK_TYPE_VBOX);
+G_DEFINE_TYPE (PhidiasChannelView, phidias_channelview, GTK_TYPE_BOX);
 
 static void viewer_changed_cb (GtkComboBox *widget, PhidiasChannelView *item)
 {
@@ -79,7 +79,7 @@ static void new_plugin_cb (PhidiasLoader *loader, GObject *plugin, PhidiasChanne
 	plug = PHIDIAS_CHANNELS_VIEWER (plugin);
 	g_signal_connect (plug, "channel-changed", G_CALLBACK (selected_channel_changed_cb), item);
 	item->priv->plugins = g_list_append (item->priv->plugins, plug);
-	gtk_combo_box_append_text (GTK_COMBO_BOX (item->priv->selector), phidias_channels_viewer_get_name (plug));
+	gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (item->priv->selector), phidias_channels_viewer_get_name (plug));
 
 	if (gtk_bin_get_child (GTK_BIN (item->priv->viewer_frame)) == NULL)
 		gtk_combo_box_set_active (GTK_COMBO_BOX (item->priv->selector), 0);
@@ -124,9 +124,10 @@ static void phidias_channelview_init (PhidiasChannelView *item)
 {
 	GtkWidget *scroll;
 
+	gtk_orientable_set_orientation (GTK_ORIENTABLE (item), GTK_ORIENTATION_VERTICAL);
 	item->priv = PHIDIAS_CHANNELVIEW_GET_PRIVATE (item);
 
-	item->priv->selector = gtk_combo_box_new_text ();
+	item->priv->selector = gtk_combo_box_text_new ();
 	gtk_box_pack_start (GTK_BOX (item), item->priv->selector, FALSE, FALSE, 0);
 	g_signal_connect (item->priv->selector, "changed", G_CALLBACK (viewer_changed_cb), item);
 

@@ -23,7 +23,7 @@
 #define PHIDIAS_ENGINE_GET_PRIVATE(obj)	(G_TYPE_INSTANCE_GET_PRIVATE ((obj), PHIDIAS_ENGINE_TYPE, PhidiasEnginePrivate))
 
 struct _PhidiasEnginePrivate {
-	TrackerClient	*tracker;
+	GDBusConnection	*bus;
 
 	GtkListStore	*channels;
 	GPtrArray	*item_requirements;
@@ -87,16 +87,26 @@ static void fill_model_with_items (GPtrArray *result, GError *error, gpointer us
 	}
 }
 
-static void fill_model_with_extra_data (GPtrArray *result, GError *error, gpointer user_data)
+static void fill_model_with_extra_data (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
-	register int i;
 	int index;
 	gboolean found;
-	gchar **values;
+	gchar *vindex;
 	gchar *subject;
+	gchar *vsubject;
+	gchar *vname;
 	GtkListStore *model;
 	GtkTreeModel *tmodel;
 	GtkTreeIter iter;
+	GVariant *var;
+	GVariantIter *viter;
+	GVariantIter *vsubiter;
+	GError *error;
+	PhidiasEngine *engine;
+
+	engine = PHIDIAS_ENGINE (source_object);
+	error = NULL;
+	var = g_dbus_connection_call_finish (engine->priv->bus, res, &error);
 
 	if (error != NULL) {
 		g_warning ("Unable to fetch items: %s.", error->message);
@@ -104,34 +114,43 @@ static void fill_model_with_extra_data (GPtrArray *result, GError *error, gpoint
 		return;
 	}
 
-	if (result->len < 1)
-		return;
-
 	tmodel = user_data;
 	model = GTK_LIST_STORE (tmodel);
 
-	values = (gchar**) g_ptr_array_index (result, 0);
-	index = strtoull (values [0], NULL, 10);
+	viter = NULL;
+	vsubiter = NULL;
+	g_variant_get (var, "(aas)", &viter);
 
-	for (i = 0; i < result->len; i++) {
-		values = (gchar**) g_ptr_array_index (result, i);
+	while (g_variant_iter_loop (viter, "as", &vsubiter)) {
+		vsubject = NULL;
+		vname = NULL;
 
-		if (gtk_tree_model_get_iter_first (tmodel, &iter) == TRUE) {
-			found = FALSE;
+		/*
+			This can be evaluated once...
+		*/
+		g_variant_iter_loop (vsubiter, "s", &vindex);
+		index = strtoull (vindex, NULL, 10);
 
-			do {
-				gtk_tree_model_get (tmodel, &iter, 0, &subject, -1);
+		if (g_variant_iter_loop (vsubiter, "s", &vsubject) && g_variant_iter_loop (vsubiter, "s", &vname)) {
+			if (gtk_tree_model_get_iter_first (tmodel, &iter) == TRUE) {
+				found = FALSE;
 
-				if (strcmp (subject, values [1]) == 0) {
-					found = TRUE;
-					gtk_list_store_set (model, &iter, index, values [2], -1);
-				}
+				do {
+					gtk_tree_model_get (tmodel, &iter, 0, &subject, -1);
 
-				g_free (subject);
+					if (strcmp (subject, vsubject) == 0) {
+						found = TRUE;
+						gtk_list_store_set (model, &iter, index, vname, -1);
+					}
 
-			} while (found == FALSE && gtk_tree_model_iter_next (tmodel, &iter) == TRUE);
+					g_free (subject);
+
+				} while (found == FALSE && gtk_tree_model_iter_next (tmodel, &iter) == TRUE);
+			}
 		}
 	}
+
+	g_variant_unref (var);
 }
 
 static gchar* build_items_query (PhidiasEngine *engine, gchar *parent)
@@ -208,7 +227,22 @@ static void add_channel_in_pool (PhidiasEngine *engine, gchar *subject)
 	g_hash_table_insert (engine->priv->models_pool, g_strdup (subject), items);
 
 	query = build_items_query (engine, subject);
-	tracker_resources_sparql_query_async (engine->priv->tracker, query, fill_model_with_items, items);
+
+	g_dbus_connection_call (
+		engine->priv->bus,
+		"org.freedesktop.Tracker1",
+		"/org/freedesktop/Tracker1/Resources",
+		"org.freedesktop.Tracker1.Resources",
+		"SparqlQuery",
+		g_variant_new ("(s)", query),
+		G_VARIANT_TYPE ("(aas)"),
+		G_DBUS_CALL_FLAGS_NONE,
+		-1,
+		NULL,
+		(GAsyncReadyCallback) fill_model_with_items,
+		items
+	);
+
 	g_free (query);
 }
 
@@ -238,7 +272,7 @@ static void phidias_engine_finalize (GObject *obj)
 
 	engine = PHIDIAS_ENGINE (obj);
 
-	g_object_unref (engine->priv->tracker);
+	g_dbus_connection_close_sync (engine->priv->bus, NULL, NULL);
 	g_object_unref (engine->priv->channels);
 
 	/*
@@ -289,58 +323,93 @@ static GtkTreeIter* search_element_in_model (GtkTreeModel *model, int offset, gc
 	return ret;
 }
 
+static void add_channel_in_model (PhidiasEngine *engine, GVariant *chans)
+{
+	register int i;
+	gsize tot;
+	int *columns;
+	const gchar **values;
+	GValue *dumps;
+	GVariant *v;
+	GVariantIter *iter;
+
+	iter = NULL;
+	g_variant_get (chans, "(aas)", &iter);
+
+	while ((v = g_variant_iter_next_value (iter))) {
+		values = g_variant_get_strv (v, &tot);
+		columns = alloca (sizeof (int) * tot);
+		dumps = alloca (sizeof (GValue) * tot);
+		memset (dumps, 0, sizeof (GValue) * tot);
+
+		for (i = 0; i < tot; i++) {
+			columns [i] = i;
+			g_value_init (&(dumps [i]), G_TYPE_STRING);
+			g_value_set_string (&(dumps [i]), values [i]);
+		}
+
+		gtk_list_store_insert_with_valuesv (engine->priv->channels, NULL, G_MAXINT, columns, dumps, tot);
+		add_channel_in_pool (engine, values [0]);
+		g_variant_unref (v);
+	}
+}
+
+static void append_expanded_extra_column (PhidiasExtraColumn *col, const gchar *subject, GString *query, char c)
+{
+	register int i;
+	int path_len;
+	const gchar **path;
+
+	switch (phidias_extra_column_get_content_type (col)) {
+		case PHIDIAS_EXTRA_COLUMN_PREDICATE:
+			g_string_append_printf (query, " . OPTIONAL { <%s> %s ?%c }",
+						subject, phidias_extra_column_get_predicate (col), c);
+			break;
+
+		case PHIDIAS_EXTRA_COLUMN_PATH:
+			path = phidias_extra_column_get_path (col);
+			path_len = g_strv_length ((gchar**) path);
+
+			g_string_append_printf (query, " . OPTIONAL { <%s> %s ?%c_offset_0 ", subject, path [0], c);
+
+			for (i = 1; i < path_len - 1; i++) {
+				g_string_append_printf (query, " . ?%c_offset_%d %s ?%c_offset_%d ",
+							c, i - 1, path [i], c, i);
+			}
+
+			g_string_append_printf (query, " . ?%c_offset_%d %s ?%c }", c, i - 1, path [i], c);
+			break;
+
+		default:
+			g_error ("Undefined extra column contents.");
+			break;
+	}
+}
+
+#if 0
+
 static GtkTreeIter* search_channel_in_model (PhidiasEngine *engine, gchar *subject)
 {
 	return search_element_in_model (GTK_TREE_MODEL (engine->priv->channels), CONTAINER_INFO_SUBJECT, subject);
 }
 
-static void add_channel_in_model (PhidiasEngine *engine, GPtrArray *chans)
+static void channel_added_data_reply_cb (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
-	register int i;
-	register int a;
-	int tot;
-	int *columns;
-	gchar **values;
-	GValue *dumps;
-
-	if (chans->len < 1)
-		return;
-
-	values = (gchar**) g_ptr_array_index (chans, 0);
-	tot = g_strv_length (values);
-
-	columns = alloca (sizeof (int) * tot);
-
-	dumps = alloca (sizeof (GValue) * tot);
-	memset (dumps, 0, sizeof (GValue) * tot);
-
-	for (i = 0; i < tot; i++) {
-		columns [i] = i;
-		g_value_init (&(dumps [i]), G_TYPE_STRING);
-	}
-
-	for (i = 0; i < chans->len; i++) {
-		values = (gchar**) g_ptr_array_index (chans, i);
-
-		for (a = 0; a < tot; a++)
-			g_value_set_string (&(dumps [a]), values [a]);
-
-		gtk_list_store_insert_with_valuesv (engine->priv->channels, NULL, G_MAXINT, columns, dumps, tot);
-		add_channel_in_pool (engine, values [0]);
-	}
-}
-
-static void channel_added_data_reply_cb (GPtrArray *result, GError *error, gpointer user_data)
-{
+	GVariant *var;
+	GError *error;
 	PhidiasEngine *engine;
+
+	engine = PHIDIAS_ENGINE (source_object);
+	error = NULL;
+	var = g_dbus_connection_call_finish (engine->priv->bus, res, &error);
 
 	if (error != NULL) {
 		g_warning ("Error fetching data about channel: %s.", error->message);
 		g_error_free (error);
 	}
 	else {
-		engine = user_data;
-		add_channel_in_model (engine, result);
+		add_channel_in_model (engine, var);
+		g_variant_unref (var);
 	}
 }
 
@@ -366,27 +435,65 @@ static void channel_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine
 
 		g_string_append_printf (query, " }");
 		str_query = g_string_free (query, FALSE);
-		tracker_resources_sparql_query_async (engine->priv->tracker, str_query, channel_added_data_reply_cb, engine);
+
+		g_dbus_connection_call (
+			engine->priv->bus,
+			"org.freedesktop.Tracker1",
+			"/org/freedesktop/Tracker1/Resources",
+			"org.freedesktop.Tracker1.Resources",
+			"SparqlQuery",
+			g_variant_new ("(s)", str_query),
+			G_VARIANT_TYPE ("(aas)"),
+			G_DBUS_CALL_FLAGS_NONE,
+			-1,
+			NULL,
+			(GAsyncReadyCallback) channel_added_data_reply_cb,
+			NULL
+		);
+
 		g_free (str_query);
 	}
 }
 
-static void channel_changed_data_reply_cb (GPtrArray *result, GError *error, gpointer user_data)
+static void channel_changed_data_reply_cb (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	int index;
-	gchar **values;
+	gsize tot;
+	const gchar **values;
+	GVariant *var;
 	GtkTreeIter *iter;
+	GVariant *v;
+	GVariantIter *viter;
+	GError *error;
 	PhidiasEngine *engine;
 
-	engine = user_data;
-	values = (gchar**) g_ptr_array_index (result, 0);
+	engine = PHIDIAS_ENGINE (source_object);
+	error = NULL;
+	var = g_dbus_connection_call_finish (engine->priv->bus, res, &error);
 
-	iter = search_channel_in_model (engine, values [0]);
-	if (iter != NULL) {
-		index = strtoull (values [1], NULL, 10);
-		gtk_list_store_set (engine->priv->channels, iter, index, values [2], -1);
-		gtk_tree_iter_free (iter);
+	if (error != NULL) {
+		g_warning ("Error fetching data about changed channel: %s.", error->message);
+		g_error_free (error);
+		return;
 	}
+
+	viter = NULL;
+	g_variant_get (var, "(aas)", &viter);
+
+	if (v = g_variant_iter_next_value (viter)) {
+		values = g_variant_get_strv (v, &tot);
+
+		iter = search_channel_in_model (engine, values [0]);
+		if (iter != NULL) {
+			index = strtoull (values [1], NULL, 10);
+			gtk_list_store_set (engine->priv->channels, iter, index, values [2], -1);
+			gtk_tree_iter_free (iter);
+		}
+
+		g_variant_unref (v);
+	}
+
+	g_variant_unref (var);
 }
 
 static void channel_changed_cb (DBusGProxy *proxy, gchar **subjects, gchar **data, PhidiasEngine *engine)
@@ -399,7 +506,22 @@ static void channel_changed_cb (DBusGProxy *proxy, gchar **subjects, gchar **dat
 		for (a = 0; a < CONTAINER_INFO_LAST; a++) {
 			if (strcmp (data [i], CONTAINER_INFO_PREDICATES [a]) == 0) {
 				query = g_strdup_printf ("SELECT <%s> %d ?a WHERE {<%s> %s ?a}", subjects [i], a, subjects [i], data [i]);
-				tracker_resources_sparql_query_async (engine->priv->tracker, query, channel_changed_data_reply_cb, engine);
+
+				g_dbus_connection_call (
+					engine->priv->bus,
+					"org.freedesktop.Tracker1",
+					"/org/freedesktop/Tracker1/Resources",
+					"org.freedesktop.Tracker1.Resources",
+					"SparqlQuery",
+					g_variant_new ("(s)", str_query),
+					G_VARIANT_TYPE ("(aas)"),
+					G_DBUS_CALL_FLAGS_NONE,
+					-1,
+					NULL,
+					(GAsyncReadyCallback) channel_changed_data_reply_cb,
+					NULL
+				);
+
 				g_free (query);
 				break;
 			}
@@ -450,88 +572,55 @@ static gboolean search_item_in_models_pool (PhidiasEngine *engine, gchar *subjec
 	}
 }
 
-static void item_added_data_reply_cb (GPtrArray *result, GError *error, gpointer user_data)
+static void item_added_data_reply_cb (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	register int i;
-	int tot;
+	gsize tot;
 	int *columns;
 	gchar **values;
 	GValue *dumps;
 	GtkTreeModelFilter *filtered_model;
 	GtkListStore *model;
+	GVariant *var;
+	GVariantIter *iter;
+	GVariantIter *subiter;
 	PhidiasEngine *engine;
+
+	engine = PHIDIAS_ENGINE (source_object);
+	error = NULL;
+	var = g_dbus_connection_call_finish (engine->priv->bus, res, &error);
 
 	if (error != NULL) {
 		g_warning ("Error fetching data about item: %s.", error->message);
 		g_error_free (error);
+		return;
 	}
-	else if (result->len != 0) {
-		engine = user_data;
 
-		values = (gchar**) g_ptr_array_index (result, 0);
-		tot = g_strv_length (values);
+	iter = NULL;
+	subiter = NULL;
+	g_variant_get (var, "(aas)", &iter);
 
-		columns = alloca (sizeof (int) * tot);
+	while (g_variant_iter_loop (iter, "as", &subiter)) {
+		values = g_variant_get_strv (subiter, &tot);
 
-		dumps = alloca (sizeof (GValue) * tot);
-		memset (dumps, 0, sizeof (GValue) * tot);
+		filtered_model = g_hash_table_lookup (engine->priv->models_pool, values [ITEM_INFO_LAST]);
+		if (filtered_model != NULL) {
+			columns = alloca (sizeof (int) * tot);
+			dumps = alloca (sizeof (GValue) * tot);
+			memset (dumps, 0, sizeof (GValue) * tot);
 
-		/*
-			In the last position of the array we required the subject of the
-			container of the item: it has not to be put in the model, is used to
-			retrieve the right model itself
-		*/
-
-		for (i = 0; i < (tot - 1); i++) {
-			columns [i] = i;
-			g_value_init (&(dumps [i]), G_TYPE_STRING);
-		}
-
-		for (i = 0; i < result->len; i++) {
-			values = (gchar**) g_ptr_array_index (result, i);
-
-			filtered_model = g_hash_table_lookup (engine->priv->models_pool, values [ITEM_INFO_LAST]);
-			if (filtered_model != NULL) {
-				for (i = 0; i < (tot - 1); i++)
-					g_value_set_string (&(dumps [i]), values [i]);
-
-				model = GTK_LIST_STORE (gtk_tree_model_filter_get_model (filtered_model));
-				gtk_list_store_insert_with_valuesv (model, NULL, G_MAXINT, columns, dumps, tot - 1);
-			}
-		}
-	}
-}
-
-static void append_expanded_extra_column (PhidiasExtraColumn *col, const gchar *subject, GString *query, char c)
-{
-	register int i;
-	int path_len;
-	const gchar **path;
-
-	switch (phidias_extra_column_get_content_type (col)) {
-		case PHIDIAS_EXTRA_COLUMN_PREDICATE:
-			g_string_append_printf (query, " . OPTIONAL { <%s> %s ?%c }",
-						subject, phidias_extra_column_get_predicate (col), c);
-			break;
-
-		case PHIDIAS_EXTRA_COLUMN_PATH:
-			path = phidias_extra_column_get_path (col);
-			path_len = g_strv_length ((gchar**) path);
-
-			g_string_append_printf (query, " . OPTIONAL { <%s> %s ?%c_offset_0 ", subject, path [0], c);
-
-			for (i = 1; i < path_len - 1; i++) {
-				g_string_append_printf (query, " . ?%c_offset_%d %s ?%c_offset_%d ",
-							c, i - 1, path [i], c, i);
+			for (i = 0; i < tot; i++) {
+				columns [i] = i;
+				g_value_init (&(dumps [i]), G_TYPE_STRING);
+				g_value_set_string (&(dumps [i]), values [i]);
 			}
 
-			g_string_append_printf (query, " . ?%c_offset_%d %s ?%c }", c, i - 1, path [i], c);
-			break;
-
-		default:
-			g_error ("Undefined extra column contents.");
-			break;
+			model = GTK_LIST_STORE (gtk_tree_model_filter_get_model (filtered_model));
+			gtk_list_store_insert_with_valuesv (model, NULL, G_MAXINT, columns, dumps, tot - 1);
+		}
 	}
+
+	g_variant_unref (var);
 }
 
 static void item_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine *engine)
@@ -574,7 +663,22 @@ static void item_added_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine *e
 		g_string_append (query, " }");
 
 		str_query = g_string_free (query, FALSE);
-		tracker_resources_sparql_query_async (engine->priv->tracker, str_query, item_added_data_reply_cb, engine);
+
+		g_dbus_connection_call (
+			engine->priv->bus,
+			"org.freedesktop.Tracker1",
+			"/org/freedesktop/Tracker1/Resources",
+			"org.freedesktop.Tracker1.Resources",
+			"SparqlQuery",
+			g_variant_new ("(s)", str_query),
+			G_VARIANT_TYPE ("(aas)"),
+			G_DBUS_CALL_FLAGS_NONE,
+			-1,
+			NULL,
+			(GAsyncReadyCallback) item_added_data_reply_cb,
+			NULL
+		);
+
 		g_free (str_query);
 	}
 }
@@ -607,7 +711,22 @@ static void item_changed_cb (DBusGProxy *proxy, gchar **subjects, gchar **data, 
 		for (a = 0; a < ITEM_INFO_LAST; a++) {
 			if (strcmp (data [i], ITEM_INFO_PREDICATES [a]) == 0) {
 				query = g_strdup_printf ("SELECT <%s> %d ?a WHERE {<%s> %s ?a}", subjects [i], a, subjects [i], data [i]);
-				tracker_resources_sparql_query_async (engine->priv->tracker, query, item_changed_data_reply_cb, engine);
+
+				g_dbus_connection_call (
+					engine->priv->bus,
+					"org.freedesktop.Tracker1",
+					"/org/freedesktop/Tracker1/Resources",
+					"org.freedesktop.Tracker1.Resources",
+					"SparqlQuery",
+					g_variant_new ("(s)", query),
+					G_VARIANT_TYPE ("(aas)"),
+					G_DBUS_CALL_FLAGS_NONE,
+					-1,
+					NULL,
+					(GAsyncReadyCallback) item_changed_data_reply_cb,
+					NULL
+				);
+
 				g_free (query);
 				break;
 			}
@@ -629,14 +748,15 @@ static void item_removed_cb (DBusGProxy *proxy, gchar **subjects, PhidiasEngine 
 	}
 }
 
+#endif
+
 static void listen_incoming_data (PhidiasEngine *engine)
 {
+	/*
 	gchar *sep;
 	gchar *name;
 	gchar *namespace;
 	gchar *path;
-	DBusGConnection *bus;
-	DBusGProxy *wrap;
 
 	bus = dbus_g_bus_get (DBUS_BUS_SESSION, NULL);
 	dbus_g_object_register_marshaller (phidias_marshal_VOID__BOXED_BOXED, G_TYPE_NONE, G_TYPE_STRV, G_TYPE_STRV, G_TYPE_INVALID);
@@ -647,6 +767,18 @@ static void listen_incoming_data (PhidiasEngine *engine)
 	name = sep + 1;
 	path = g_strdup_printf ("/org/freedesktop/Tracker1/Resources/Classes/%s/%s", namespace, name);
 	wrap = dbus_g_proxy_new_for_name (bus, "org.freedesktop.Tracker1", path, "org.freedesktop.Tracker1.Resources.Class");
+
+	g_dbus_connection_signal_subscribe (engine->priv->bus,
+						TRACKER_DBUS_SERVICE,
+						TRACKER_DBUS_INTERFACE_RESOURCES,
+						"GraphUpdated",
+						TRACKER_DBUS_OBJECT_RESOURCES,
+,						CONTAINER_INFO_MAIN_CLASS,
+						G_DBUS_SIGNAL_FLAGS_NONE,
+						channel_changed_cb,
+,						NULL,
+,						NULL
+	);
 
 	dbus_g_proxy_add_signal (wrap, "SubjectsAdded", G_TYPE_STRV, G_TYPE_INVALID);
 	dbus_g_proxy_connect_signal (wrap, "SubjectsAdded", G_CALLBACK (channel_added_cb), engine, NULL);
@@ -672,20 +804,25 @@ static void listen_incoming_data (PhidiasEngine *engine)
 
 	dbus_g_proxy_add_signal (wrap, "SubjectsRemoved", G_TYPE_STRV, G_TYPE_INVALID);
 	dbus_g_proxy_connect_signal (wrap, "SubjectsRemoved", G_CALLBACK (item_removed_cb), engine, NULL);
+	*/
 }
 
-static void fill_model_with_channels (GPtrArray *result, GError *error, gpointer user_data)
+static void fill_model_with_channels (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
+	GVariant *var;
+	GError *error;
 	PhidiasEngine *engine;
 
-	engine = user_data;
+	engine = PHIDIAS_ENGINE (source_object);
+	error = NULL;
+	var = g_dbus_connection_call_finish (engine->priv->bus, res, &error);
 
 	if (error != NULL) {
 		g_warning ("Unable to retrieve list of channels: %s.", error->message);
 		g_error_free (error);
 	}
 	else {
-		add_channel_in_model (engine, result);
+		add_channel_in_model (engine, var);
 	}
 
 	listen_incoming_data (engine);
@@ -704,7 +841,22 @@ static void init_channels (PhidiasEngine *engine)
 	engine->priv->channels = gtk_list_store_newv (CONTAINER_INFO_LAST, types);
 
 	query = build_channels_query ();
-	tracker_resources_sparql_query_async (engine->priv->tracker, query, fill_model_with_channels, engine);
+
+	g_dbus_connection_call (
+		engine->priv->bus,
+		"org.freedesktop.Tracker1",
+		"/org/freedesktop/Tracker1/Resources",
+		"org.freedesktop.Tracker1.Resources",
+		"SparqlQuery",
+		g_variant_new ("(s)", query),
+		G_VARIANT_TYPE ("(aas)"),
+		G_DBUS_CALL_FLAGS_NONE,
+		-1,
+		NULL,
+		(GAsyncReadyCallback) fill_model_with_channels,
+		NULL
+	);
+
 	g_free (query);
 }
 
@@ -729,7 +881,21 @@ static void enrich_models_with_metadata (PhidiasEngine *engine, PhidiasExtraColu
 
 		str_query = g_string_free (query, FALSE);
 
-		tracker_resources_sparql_query_async (engine->priv->tracker, str_query, fill_model_with_extra_data, model);
+		g_dbus_connection_call (
+			engine->priv->bus,
+			"org.freedesktop.Tracker1",
+			"/org/freedesktop/Tracker1/Resources",
+			"org.freedesktop.Tracker1.Resources",
+			"SparqlQuery",
+			g_variant_new ("(s)", str_query),
+			G_VARIANT_TYPE ("(aas)"),
+			G_DBUS_CALL_FLAGS_NONE,
+			-1,
+			NULL,
+			(GAsyncReadyCallback) fill_model_with_extra_data,
+			model
+		);
+
 		g_free (str_query);
 	}
 
@@ -739,7 +905,7 @@ static void enrich_models_with_metadata (PhidiasEngine *engine, PhidiasExtraColu
 static void phidias_engine_init (PhidiasEngine *item)
 {
 	item->priv = PHIDIAS_ENGINE_GET_PRIVATE (item);
-	item->priv->tracker = tracker_client_new (0, G_MAXINT);
+	item->priv->bus = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
 	item->priv->item_requirements = g_ptr_array_new ();
 	item->priv->models_pool = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
 
@@ -796,10 +962,23 @@ GtkTreeModel* phidias_engine_get_current_model (PhidiasEngine *engine)
 	return engine->priv->selected_model;
 }
 
-static void check_update (GError *error, gpointer data)
+static void check_update (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
-	if (error != NULL)
+	GVariant *var;
+	GError *error;
+	PhidiasEngine *engine;
+
+	engine = PHIDIAS_ENGINE (source_object);
+	error = NULL;
+	var = g_dbus_connection_call_finish (engine->priv->bus, res, &error);
+
+	if (error != NULL) {
 		g_warning ("Unable to update the item: %s.", error->message);
+		g_error_free (error);
+	}
+	else {
+		g_variant_unref (var);
+	}
 }
 
 void phidias_engine_update_item (PhidiasEngine *engine, GtkTreeModel *model, GtkTreeIter *iter, int index, gchar *value)
@@ -815,7 +994,22 @@ void phidias_engine_update_item (PhidiasEngine *engine, GtkTreeModel *model, Gtk
 				 subject, subject, ITEM_INFO_PREDICATES [index],
 				 subject, ITEM_INFO_PREDICATES [index],
 				 subject, ITEM_INFO_PREDICATES [index], value);
-	tracker_resources_sparql_update_async (engine->priv->tracker, query, check_update, engine);
+
+	g_dbus_connection_call (
+		engine->priv->bus,
+		"org.freedesktop.Tracker1",
+		"/org/freedesktop/Tracker1/Resources",
+		"org.freedesktop.Tracker1.Resources",
+		"SparqlQuery",
+		g_variant_new ("(s)", query),
+		G_VARIANT_TYPE ("(aas)"),
+		G_DBUS_CALL_FLAGS_NONE,
+		-1,
+		NULL,
+		(GAsyncReadyCallback) check_update,
+		NULL
+	);
+
 	g_free (query);
 
 	fmodel = GTK_TREE_MODEL_FILTER (model);

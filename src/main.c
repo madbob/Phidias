@@ -28,8 +28,10 @@ int main (int argc, char **argv)
 {
 	GtkWidget *first;
 
-	g_thread_init (NULL);
-	gtk_clutter_init (&argc, &argv);
+	if (gtk_clutter_init (&argc, &argv) != CLUTTER_INIT_SUCCESS) {
+		g_warning ("Error in initialize GtkClutter");
+		exit (1);
+	}
 
 	g_log_set_always_fatal (G_LOG_LEVEL_CRITICAL);
 

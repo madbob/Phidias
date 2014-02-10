@@ -1,0 +1,8 @@
+*.o
+*.lo
+Makefile
+*.in
+.deps
+.libs
+*marshal.c
+*marshal.h

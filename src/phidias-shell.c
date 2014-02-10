@@ -99,13 +99,13 @@ static void phidias_shell_init (PhidiasShell *item)
 
 	item->priv->engine = phidias_engine_new ();
 
-	hor = gtk_hpaned_new ();
+	hor = gtk_paned_new (GTK_ORIENTATION_HORIZONTAL);
 	gtk_container_add (GTK_CONTAINER (item), hor);
 
 	item->priv->channels = phidias_channelview_new ();
 	gtk_paned_add1 (GTK_PANED (hor), item->priv->channels);
 
-	ver = gtk_vbox_new (FALSE, 0);
+	ver = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 	gtk_paned_add2 (GTK_PANED (hor), ver);
 
 	item->priv->search = phidias_search_entry_new ();

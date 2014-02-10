@@ -55,33 +55,36 @@ static void feed_selected_cb (GtkTreeSelection *treeselection, FeedSettings *set
 	}
 }
 
-static void fill_model_with_channels (GPtrArray *result, GError *error, gpointer user_data)
+static void fill_model_with_channels (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	int i;
-	gchar **values;
 	GtkWidget *dialog;
 	GtkListStore *list;
+	TrackerSparqlCursor *cursor;
+	GError *error;
+
+	error = NULL;
+	cursor = tracker_sparql_connection_query_finish (TRACKER_SPARQL_CONNECTION (source_object), res, &error);
 
 	if (error != NULL) {
 		dialog = gtk_message_dialog_new (NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "Unable to fetch data about current feeds:\n%s", error->message);
 		gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog), "Is Tracker running?");
 		gtk_dialog_run (GTK_DIALOG (dialog));
 		gtk_widget_destroy (dialog);
+		g_error_free (error);
 		return;
 	}
 
 	list = user_data;
 
-	for (i = 0; i < result->len; i++) {
-		values = (gchar**) g_ptr_array_index (result, i);
-
+	while (tracker_sparql_cursor_next (cursor, NULL, NULL)) {
 		gtk_list_store_insert_with_values (list, NULL, G_MAXINT,
-						   PREDICATE_SUBJECT, values [0],
-						   PREDICATE_NAME, values [1],
-						   PREDICATE_DOWNLOAD, strcmp (values [2], "true") == 0,
-						   PREDICATE_DOWNPATH, values [3],
-						   PREDICATE_MAXSIZE, g_ascii_strtoll (values [4], NULL, 10),
-						   PREDICATE_EXPIRY, g_ascii_strtoll (values [5], NULL, 10),
+						   PREDICATE_SUBJECT, tracker_sparql_cursor_get_string (cursor, 0, NULL),
+						   PREDICATE_NAME, tracker_sparql_cursor_get_string (cursor, 1, NULL),
+						   PREDICATE_DOWNLOAD, tracker_sparql_cursor_get_boolean (cursor, 2),
+						   PREDICATE_DOWNPATH, tracker_sparql_cursor_get_string (cursor, 3, NULL),
+						   PREDICATE_MAXSIZE, tracker_sparql_cursor_get_double (cursor, 4),
+						   PREDICATE_EXPIRY, tracker_sparql_cursor_get_double (cursor, 5),
 						   6, FALSE, -1);
 	}
 }
@@ -108,7 +111,7 @@ static gboolean retrive_row_by_id (GtkTreeModel *model, gchar *id, GtkTreeIter *
 	return found;
 }
 
-static void feed_removed (FeedSettings *setts, gchar *id, TrackerClient *tracker_client)
+static void feed_removed (FeedSettings *setts, gchar *id, TrackerSparqlConnection *tracker_client)
 {
 	TrackerSparqlBuilder *sparql;
 
@@ -125,14 +128,14 @@ static void feed_removed (FeedSettings *setts, gchar *id, TrackerClient *tracker
 	tracker_sparql_builder_object (sparql, "rdfs:Resource");
 	tracker_sparql_builder_where_close (sparql);
 
-	tracker_resources_sparql_update (tracker_client, tracker_sparql_builder_get_result (sparql), NULL);
+	tracker_sparql_connection_update (tracker_client, tracker_sparql_builder_get_result (sparql), 0, NULL, NULL);
 
 	g_object_unref (sparql);
 }
 
-static void feed_saved (FeedSettings *setts, gchar *sparql, TrackerClient *tracker_client)
+static void feed_saved (FeedSettings *setts, gchar *sparql, TrackerSparqlConnection *tracker_client)
 {
-	tracker_resources_sparql_update (tracker_client, sparql, NULL);
+	tracker_sparql_connection_update (tracker_client, sparql, 0, NULL, NULL);
 }
 
 static void feed_modified (FeedSettings *setts, gchar *id, PREDICATE_INDEX predicate, GValue *value, GtkListStore *model)
@@ -160,6 +163,8 @@ static void feed_modified (FeedSettings *setts, gchar *id, PREDICATE_INDEX predi
 		}
 	}
 }
+
+#if 0
 
 static void channel_added_cb (DBusGProxy *proxy, gchar **subjects, GtkListStore *model)
 {
@@ -222,7 +227,9 @@ static void channel_removed_cb (DBusGProxy *proxy, gchar **subjects, GtkListStor
 		gtk_tree_model_foreach (GTK_TREE_MODEL (model), seek_and_destroy, subjects [i]);
 }
 
-static void init_model (TrackerClient *tracker_client, GtkListStore *model)
+#endif
+
+static void init_model (TrackerSparqlConnection *tracker, GtkListStore *model)
 {
 	gchar *query;
 
@@ -235,38 +242,42 @@ static void init_model (TrackerClient *tracker_client, GtkListStore *model)
 				"OPTIONAL {?setts mfo:maxSize ?enclosuressize} . "
 				"OPTIONAL {?setts mfo:expiryInterval ?expiry}}";
 
-	tracker_resources_sparql_query_async (tracker_client, query, fill_model_with_channels, model);
+	tracker_sparql_connection_query_async (tracker, query, NULL, fill_model_with_channels, model);
 }
 
-static void find_channel_and_update (GPtrArray *result, GError *error, gpointer user_data)
+static void find_channel_and_update (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
 	gchar **values;
 	GtkTreeModel *model;
 	GtkTreeIter iter;
+	TrackerSparqlCursor *cursor;
+	GError *error;
+
+	error = NULL;
+	cursor = tracker_sparql_connection_query_finish (TRACKER_SPARQL_CONNECTION (source_object), res, &error);
 
 	if (error != NULL) {
 		g_warning ("Unable to update channel: %s", error->message);
+		g_error_free (error);
 		return;
 	}
 
-	if (result->len == 0)
-		return;
-
 	model = user_data;
-	values = (gchar**) g_ptr_array_index (result, 0);
 
-	if (retrive_row_by_id (model, values [0], &iter) == TRUE) {
-		gtk_list_store_set (GTK_LIST_STORE (model), &iter,
-				    PREDICATE_NAME, values [1],
-				    PREDICATE_DOWNLOAD, strcmp (values [2], "1") == TRUE,
-				    PREDICATE_DOWNPATH, values [3],
-				    PREDICATE_MAXSIZE, g_ascii_strtoll (values [4], NULL, 10),
-				    PREDICATE_EXPIRY, g_ascii_strtoll (values [5], NULL, 10),
-				    6, FALSE, -1);
+	while (tracker_sparql_cursor_next (cursor, NULL, NULL)) {
+		if (retrive_row_by_id (model, tracker_sparql_cursor_get_string (cursor, 0, NULL), &iter) == TRUE) {
+			gtk_list_store_set (GTK_LIST_STORE (model), &iter,
+					    PREDICATE_NAME, tracker_sparql_cursor_get_string (cursor, 1, NULL),
+					    PREDICATE_DOWNLOAD, tracker_sparql_cursor_get_boolean (cursor, 2),
+					    PREDICATE_DOWNPATH, tracker_sparql_cursor_get_string (cursor, 3, NULL),
+					    PREDICATE_MAXSIZE, tracker_sparql_cursor_get_double (cursor, 4),
+					    PREDICATE_EXPIRY, tracker_sparql_cursor_get_double (cursor, 5),
+					    6, FALSE, -1);
+		}
 	}
 }
 
-static void row_added_in_model (GtkTreeModel *tree_model, GtkTreePath *path, GtkTreeIter *iter, TrackerClient *tracker_client)
+static void row_added_in_model (GtkTreeModel *tree_model, GtkTreePath *path, GtkTreeIter *iter, TrackerSparqlConnection *tracker_client)
 {
 	gchar *id;
 	gchar *query;
@@ -285,13 +296,13 @@ static void row_added_in_model (GtkTreeModel *tree_model, GtkTreePath *path, Gtk
 							"OPTIONAL {?setts mfo:maxSize ?enclosuressize} . "
 							"OPTIONAL {?setts mfo:expiryInterval ?expiry}}", id, id, id);
 
-	tracker_resources_sparql_query_async (tracker_client, query, find_channel_and_update, tree_model);
+	tracker_sparql_connection_query_async (tracker_client, query, NULL, find_channel_and_update, tree_model);
 
 	g_free (id);
 	g_free (query);
 }
 
-static void tune_model (TrackerClient *tracker_client, GtkListStore *model)
+static void tune_model (TrackerSparqlConnection *tracker_client, GtkListStore *model)
 {
 	g_signal_connect (model, "row-inserted", G_CALLBACK (row_added_in_model), tracker_client);
 	g_signal_connect (model, "row-changed", G_CALLBACK (row_added_in_model), tracker_client);
@@ -299,6 +310,8 @@ static void tune_model (TrackerClient *tracker_client, GtkListStore *model)
 
 static void listen_tracker (GtkListStore *model)
 {
+#if 0
+
 	DBusGConnection *bus;
 	DBusGProxy *wrap;
 
@@ -318,6 +331,8 @@ static void listen_tracker (GtkListStore *model)
 
 	dbus_g_proxy_add_signal (wrap, "SubjectsRemoved", G_TYPE_STRV, G_TYPE_INVALID);
 	dbus_g_proxy_connect_signal (wrap, "SubjectsRemoved", G_CALLBACK (channel_removed_cb), model, NULL);
+
+#endif
 }
 
 int main (int argc, char **argv)
@@ -334,24 +349,22 @@ int main (int argc, char **argv)
 	GtkCellRenderer *renderer;
 	GtkTreeViewColumn *col;
 	GtkTreeSelection *selection;
-	TrackerClient *tracker_client;
+	TrackerSparqlConnection *tracker;
 
 	gtk_init (&argc, &argv);
 	g_set_application_name ("Phidias Feeds Manager");
 
-	tracker_client = tracker_client_new (0, G_MAXINT);
+	tracker = tracker_sparql_connection_get (NULL, NULL);
 
 	window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
-	vbox = gtk_vbox_new (FALSE, 10);
+	vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
 	gtk_container_add (GTK_CONTAINER (window), vbox);
 
 	frame = gtk_frame_new ("Manage");
-	gtk_container_border_width (GTK_CONTAINER (frame), 10);
 	gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
 
-	hbox = gtk_hbox_new (TRUE, 10);
-	gtk_container_border_width (GTK_CONTAINER (hbox), 10);
+	hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
 	gtk_container_add (GTK_CONTAINER (frame), hbox);
 
 	list = gtk_tree_view_new ();
@@ -367,7 +380,6 @@ int main (int argc, char **argv)
 	gtk_box_pack_start (GTK_BOX (hbox), setts, FALSE, FALSE, 0);
 
 	frame = gtk_frame_new ("Add");
-	gtk_container_border_width (GTK_CONTAINER (frame), 10);
 	gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
 
 	adder = feeds_adder_new ();
@@ -382,21 +394,21 @@ int main (int argc, char **argv)
 	*/
 	gtk_tree_view_set_model (GTK_TREE_VIEW (list), GTK_TREE_MODEL (model));
 
-	g_signal_connect (setts, "remove-feed", G_CALLBACK (feed_removed), tracker_client);
-	g_signal_connect (setts, "save-feed", G_CALLBACK (feed_saved), tracker_client);
+	g_signal_connect (setts, "remove-feed", G_CALLBACK (feed_removed), tracker);
+	g_signal_connect (setts, "save-feed", G_CALLBACK (feed_saved), tracker);
 	g_signal_connect (setts, "update-feed", G_CALLBACK (feed_modified), model);
 	g_signal_connect (selection, "changed", G_CALLBACK (feed_selected_cb), setts);
 	g_signal_connect (window, "delete-event", G_CALLBACK (exit_all), setts);
 
-	init_model (tracker_client, model);
+	init_model (tracker, model);
 	listen_tracker (model);
-	tune_model (tracker_client, model);
-	feeds_adder_wire_tracker (FEEDS_ADDER (adder), tracker_client);
+	tune_model (tracker, model);
+	feeds_adder_wire_tracker (FEEDS_ADDER (adder), tracker);
 
 	gtk_widget_show_all (window);
 	gtk_main ();
 
-	g_object_unref (tracker_client);
+	g_object_unref (tracker);
 
 	exit (0);
 }

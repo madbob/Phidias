@@ -185,13 +185,11 @@ static void feed_settings_init (FeedSettings *app)
 	app->priv->id = NULL;
 
 	frame = gtk_frame_new ("");
-	gtk_container_border_width (GTK_CONTAINER (frame), 10);
 	app->priv->enable_expiry = gtk_check_button_new_with_label ("Auto-Expiry");
 	gtk_frame_set_label_widget (GTK_FRAME (frame), app->priv->enable_expiry);
 	gtk_box_pack_start (GTK_BOX (app), frame, TRUE, TRUE, 0);
 
 	vbox = gtk_vbox_new (FALSE, 0);
-	gtk_container_border_width (GTK_CONTAINER (vbox), 10);
 	gtk_container_add (GTK_CONTAINER (frame), vbox);
 
 	app->priv->expiry_interval = gtk_spin_button_new (GTK_ADJUSTMENT (gtk_adjustment_new (0, 0, G_MAXINT, 1, 1, 0)), 1, 0);
@@ -205,13 +203,11 @@ static void feed_settings_init (FeedSettings *app)
 	gtk_widget_set_sensitive (vbox, FALSE);
 
 	frame = gtk_frame_new ("");
-	gtk_container_border_width (GTK_CONTAINER (frame), 10);
 	app->priv->enable_enclosures = gtk_check_button_new_with_label ("Enclosures");
 	gtk_frame_set_label_widget (GTK_FRAME (frame), app->priv->enable_enclosures);
 	gtk_box_pack_start (GTK_BOX (app), frame, TRUE, TRUE, 0);
 
 	vbox = gtk_vbox_new (FALSE, 0);
-	gtk_container_border_width (GTK_CONTAINER (vbox), 10);
 	gtk_container_add (GTK_CONTAINER (frame), vbox);
 
 	app->priv->download_path = gtk_file_chooser_button_new ("", GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);

@@ -26,7 +26,6 @@
 
 #include <gtk/gtk.h>
 #include <clutter-gtk/clutter-gtk.h>
-#include <dbus/dbus-glib.h>
-#include <libtracker-client/tracker-client.h>
+#include <gio/gio.h>
 
 #endif

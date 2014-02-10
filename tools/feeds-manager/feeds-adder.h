@@ -41,17 +41,17 @@ typedef struct _FeedsAdderClass		FeedsAdderClass;
 typedef struct _FeedsAdderPrivate	FeedsAdderPrivate;
 
 struct _FeedsAdder {
-	GtkVBox parent;
+	GtkBox parent;
 	FeedsAdderPrivate *priv;
 };
 
 struct _FeedsAdderClass {
-	GtkVBoxClass parent;
+	GtkBoxClass parent;
 };
 
 GType		feeds_adder_get_type		();
 
 GtkWidget*	feeds_adder_new			();
-void		feeds_adder_wire_tracker	(FeedsAdder *adder, TrackerClient *tracker_client);
+void		feeds_adder_wire_tracker	(FeedsAdder *adder, TrackerSparqlConnection *tracker);
 
 #endif /* __FEEDS_ADDER_H__ */

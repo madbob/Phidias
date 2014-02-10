@@ -48,7 +48,7 @@ static void update_model_to_current_view (PhidiasViews *view, int page)
 		phidias_items_viewer_set_model (PHIDIAS_ITEMS_VIEWER (plug), view->priv->current_model);
 }
 
-static void viewer_changed_cb (GtkNotebook *notebook, GtkNotebookPage *page, guint index, gpointer user_data)
+static void viewer_changed_cb (GtkNotebook *notebook, GtkWidget *page, guint index, gpointer user_data)
 {
 	PhidiasViews *view;
 
