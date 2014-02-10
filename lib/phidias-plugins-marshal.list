@@ -1,4 +1,4 @@
-/*  Copyright (C) 2010 Roberto Guido <madbob@users.barberaware.org>
+/*  Copyright (C) 2010/2014 Roberto Guido <bob@linux.it>
  *
  *  This file is part of Phidias
  *

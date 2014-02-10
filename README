@@ -4,19 +4,17 @@ Phidias - A Tracker based feed reader
 Phidias is a viewer for feeds stored in Tracker, which items visualization is
 plugginable and customizzable.
 
-Tracker homepage is available at: http://www.gnome.org/projects/tracker/
-Phidias homepage is available at: http://phidias.barberaware.org/
+Tracker homepage is available at: https://wiki.gnome.org/action/show/Projects/Tracker
+Phidias homepage is available at: http://madbob.org/index.php?title=Phidias
 
 REQUIREMENTS
 -------------------------------------------------------------------------------
 Phidias depends on:
 
-  - tracker-client-0.8 >= 0.8.1
-  - dbus-glib-1 >= 0.82
-  - webkit-1.0 >= 1.1.15.4
-  - champlain-gtk-0.4 >= 0.4.2
-  - clutter-gtk-0.10 >= 0.10.2
-  - libgrss >= 0.4
+  - tracker-sparql-0.16 >= 0.16.2
+  - webkit-3.0 >= 2.2.4
+  - champlain-gtk-0.12 >= 0.12.5
+  - libgrss >= 0.5
 
 INSTALLATION
 -------------------------------------------------------------------------------
@@ -27,4 +25,4 @@ COPYRIGHT AND LICENSING
 Phidias is released under the terms of the GNU General Public License,
 version 3 or, at your option, any later version.
 
-Phidias is Copyright (C) 2010  Roberto Guido
+Phidias is Copyright (C) 2010/2014  Roberto Guido
